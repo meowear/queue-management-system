@@ -93,3 +93,4 @@ This project follows the **Queue Management System Constitution (v0.1.0)**:
 - **Scalable Architecture**: Horizontal scale via stateless frontend.
 - **Test-Driven Development**: Core calculations verified by unit tests.
 # queue-management-system
+# queue-management-system
