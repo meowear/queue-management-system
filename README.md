@@ -76,13 +76,61 @@ ALTER TABLE configurations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE queue_entries ENABLE ROW LEVEL SECURITY;
 
 -- 2. Define Policies for 'configurations'
-CREATE POLICY "Public read access for configurations" ON configurations FOR SELECT TO anon USING (true);
-CREATE POLICY "Public update access for configurations" ON configurations FOR UPDATE TO anon USING (true) WITH CHECK (true);
+-- Drop existing to mimic 'IF NOT EXISTS' safely without compilation errors
+DROP POLICY IF EXISTS "Admins have full access to configurations" ON configurations;
+CREATE POLICY "Admins have full access to configurations"
+ON configurations FOR ALL
+USING (
+  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
+) WITH CHECK (
+  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
+);
+
+DROP POLICY IF EXISTS "Anyone can view configurations" ON configurations;
+CREATE POLICY "Anyone can view configurations"
+ON configurations FOR SELECT
+USING (true);
+
 
 -- 3. Define Policies for 'queue_entries'
-CREATE POLICY "Public insert access for queue_entries" ON queue_entries FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "Public read access for queue_entries" ON queue_entries FOR SELECT TO anon USING (true);
-CREATE POLICY "Public update access for queue_entries" ON queue_entries FOR UPDATE TO anon USING (true) WITH CHECK (true);
+
+-- Rule A: Anyone can view queue status (Public Reads)
+DROP POLICY IF EXISTS "Anyone can view queue status" ON queue_entries;
+CREATE POLICY "Anyone can view queue status"
+ON queue_entries FOR SELECT
+USING (true);
+
+-- Rule B: Admins have master access to insert/update/delete records
+DROP POLICY IF EXISTS "Admins have full access to queue entries" ON queue_entries;
+CREATE POLICY "Admins have full access to queue entries"
+ON queue_entries FOR ALL
+USING (
+  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
+) WITH CHECK (
+  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
+);
+
+-- Rule C: Authenticated clients can insert their own entries
+DROP POLICY IF EXISTS "Users can insert their own entries" ON queue_entries;
+CREATE POLICY "Users can insert their own entries"
+ON queue_entries FOR INSERT
+WITH CHECK (
+  -- Allows creation if the target row's user_id matches the authenticated JWT identity
+  user_id = (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')
+  OR
+  -- OR allows creation if the app is communicating via an elevated/service role context
+  (current_setting('request.jwt.claims', true)::jsonb ->> 'sub') IS NULL
+);
+
+-- Rule D: Users can modify/cancel their own entries
+DROP POLICY IF EXISTS "Users can modify their own entries" ON queue_entries;
+CREATE POLICY "Users can modify their own entries"
+ON queue_entries FOR UPDATE
+USING (
+  user_id = (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')
+) WITH CHECK (
+  user_id = (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')
+);
 ```
 
 ## Governance & Principles
