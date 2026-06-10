@@ -1,6 +1,6 @@
 # Queue Management System (Prototype)
 
-A modular, scalable, and secure system to tackle unorganized physical queues. Built with Streamlit and Supabase.
+A modular, scalable, and secure system to tackle unorganized physical queues. Preventing crowded queues and the persistent stampedes in popular public places. Built with Streamlit and Supabase.
 
 ## Features
 
