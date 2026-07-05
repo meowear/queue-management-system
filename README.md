@@ -1,47 +1,32 @@
-# Queue Management System (Prototype)
+# CrowdControl AI
+### Machine Learning-Driven Crowd Optimization and Virtual Queueing for Pilgrimage Sites
 
-A modular, scalable, and secure system to tackle unorganized physical queues. Preventing crowded queues and the persistent stampedes in popular public places. Built with Streamlit and Supabase.
+A modular, scalable, and secure AI-powered crowd management system designed to mitigate extreme overcrowding and prevent stampedes at high-footfall temples. By leveraging Machine Learning predictive analytics and dual QR-code verification, the system replaces chaotic physical bottlenecks with a streamlined, predictive virtual queue. Built with Streamlit, Python, and Supabase.
 
-## Features
+## 🚀 Features
 
-- **Admin Dashboard**: Configure entrances, exits, capacity, and service interaction times.
-- **User Registration**: Secure a spot in the virtual line using an organization-provided User ID.
-- **Real-time Wait Time**: Get estimated wait times based on your position and available service points (parallel service).
-- **Entry Simulation**: Demonstrates the virtual-to-physical transition with a simulated QR scan button.
+- **ML-Driven Entry & Wait Time Prediction**: Utilizes time-series forecasting to predict the exact window a devotee can physically enter the temple queue. Predictions automatically adapt to live throughput, historical festival peaks, and time-of-day surges.
+- **Dual QR-Code Flow Tracking**: 
+  - **Entry Scan**: Devotees scan a QR code at designated outer perimeters to activate their virtual slot and enter the physical holding area.
+  - **Exit Scan**: Devotees scan an exit QR code upon leaving, providing the ML model with real-time temple clearance rates to continuously train and update wait-time accuracy.
+- **Dynamic Batching Admin Dashboard**: Allows temple administrators to monitor live inner-sanctum capacity, track parallel service points, and adjust maximum thresholds on the fly.
+- **Smart Virtual Pass**: Users register securely to claim a spot in the virtual line, viewing a live, dynamic countdown timer instead of standing in hazardous physical lines for hours.
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-- **Frontend**: [Streamlit](https://streamlit.io/)
-- **Backend Logic**: Python 3.10+
-- **Database**: [Supabase](https://supabase.com/) (PostgreSQL + Real-time)
+- **Frontend**: [Streamlit](https://streamlit.io/) (Mobile-responsive prototype)
+- **Machine Learning**: Python (Scikit-learn / Time-Series Forecasting)
+- **Database & Backend**: [Supabase](https://supabase.com/) (PostgreSQL + Real-time listening)
 
-## Setup Instructions
+## 📦 Setup Instructions
 
 ### 1. Database Setup (Supabase)
 
-Create the following tables in your Supabase project:
+Create two core tables in your Supabase SQL editor:
+* `configurations`: Tracks temple metadata (entrances, exits, max inner capacity, and average interaction times).
+* `queue_entries`: Tracks live user tokens, positions, and critical data points for the ML engine (`predicted_entry_time`, `entered_at` via Entry QR, and `exited_at` via Exit QR).
 
-```sql
-CREATE TABLE configurations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    entrances INTEGER NOT NULL DEFAULT 1,
-    exits INTEGER NOT NULL DEFAULT 1,
-    max_capacity INTEGER NOT NULL DEFAULT 50,
-    interaction_time INTEGER NOT NULL DEFAULT 5,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE queue_entries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id TEXT NOT NULL,
-    position SERIAL,
-    status TEXT NOT NULL DEFAULT 'waiting',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    entered_at TIMESTAMP WITH TIME ZONE
-);
-
-INSERT INTO configurations (entrances, exits, max_capacity, interaction_time) VALUES (1, 1, 50, 5);
-```
+> 💡 *Note: For full database table schemas and Row Level Security (RLS) policies to allow anonymous prototype testing, see the `/database/schema.sql` file.*
 
 ### 2. Environment Variables
 
@@ -50,6 +35,7 @@ Create a `.env` file in the project root:
 ```env
 SUPABASE_URL="your-project-url"
 SUPABASE_KEY="your-anon-key"
+
 ```
 
 ### 3. Installation
@@ -58,85 +44,25 @@ SUPABASE_KEY="your-anon-key"
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
 ```
 
 ### 4. Running the Application
 
 ```bash
 streamlit run main.py
+
 ```
 
-### 5. Row Level Security (RLS) Setup
+## ⚖️ Governance & Principles
 
-To allow the prototype to function without full Supabase Authentication, run the following SQL. This allows the `anon` role to manage entries.
+This project follows the **Queue Management System Constitution (v1.0.0)**:
 
-```sql
--- 1. Enable RLS on tables
-ALTER TABLE configurations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE queue_entries ENABLE ROW LEVEL SECURITY;
+* **Predictive Optimization**: Always prioritize ML data health to ensure safe, accurate crowd pacing.
+* **Modular Architecture**: Independent predictive models, front-end views, and QR validation endpoints.
+* **Security & Privacy First**: Tokenized check-ins to protect pilgrim user identity.
+* **Fail-Safe Operation**: If the ML prediction layer experiences downtime, the system gracefully reverts to standard linear FIFO (First-In, First-Out) queuing based on queue position.
 
--- 2. Define Policies for 'configurations'
--- Drop existing to mimic 'IF NOT EXISTS' safely without compilation errors
-DROP POLICY IF EXISTS "Admins have full access to configurations" ON configurations;
-CREATE POLICY "Admins have full access to configurations"
-ON configurations FOR ALL
-USING (
-  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
-) WITH CHECK (
-  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
-);
-
-DROP POLICY IF EXISTS "Anyone can view configurations" ON configurations;
-CREATE POLICY "Anyone can view configurations"
-ON configurations FOR SELECT
-USING (true);
-
-
--- 3. Define Policies for 'queue_entries'
-
--- Rule A: Anyone can view queue status (Public Reads)
-DROP POLICY IF EXISTS "Anyone can view queue status" ON queue_entries;
-CREATE POLICY "Anyone can view queue status"
-ON queue_entries FOR SELECT
-USING (true);
-
--- Rule B: Admins have master access to insert/update/delete records
-DROP POLICY IF EXISTS "Admins have full access to queue entries" ON queue_entries;
-CREATE POLICY "Admins have full access to queue entries"
-ON queue_entries FOR ALL
-USING (
-  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
-) WITH CHECK (
-  current_setting('request.jwt.claims', true)::jsonb ->> 'sub' IN ('admin_demo_1', 'admin_demo_2')
-);
-
--- Rule C: Authenticated clients can insert their own entries
-DROP POLICY IF EXISTS "Users can insert their own entries" ON queue_entries;
-CREATE POLICY "Users can insert their own entries"
-ON queue_entries FOR INSERT
-WITH CHECK (
-  -- Allows creation if the target row's user_id matches the authenticated JWT identity
-  user_id = (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')
-  OR
-  -- OR allows creation if the app is communicating via an elevated/service role context
-  (current_setting('request.jwt.claims', true)::jsonb ->> 'sub') IS NULL
-);
-
--- Rule D: Users can modify/cancel their own entries
-DROP POLICY IF EXISTS "Users can modify their own entries" ON queue_entries;
-CREATE POLICY "Users can modify their own entries"
-ON queue_entries FOR UPDATE
-USING (
-  user_id = (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')
-) WITH CHECK (
-  user_id = (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')
-);
 ```
 
-## Governance & Principles
-
-This project follows the **Queue Management System Constitution (v0.1.0)**:
-- **Modular Architecture**: Independent views and services.
-- **Security First**: Environment-based secret management.
-- **Scalable Architecture**: Horizontal scale via stateless frontend.
-- **Test-Driven Development**: Core calculations verified by unit tests.
+```
